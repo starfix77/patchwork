@@ -1,25 +1,29 @@
 #!/usr/bin/env python3
 
-
 '''
-Génération pele-mlel  artistique du patchwork : les photos seront disposées sur le fond noir avec des rotations différentes et aléatoires, comme un montage photographique ou un mur de photos.
+Génération pêle-mêle artistique du patchwork : les photos sont disposées sur un fond noir
+avec des rotations aléatoires, des tailles variables (± 40 %) et se recouvrent partiellement,
+comme un montage photographique ou un mur de photos.
 
-Le script conservera :
+Le script conserve :
 - Une image finale de 3840 × 1200 pixels.
 - Un fond noir.
-- Jusqu'à 20 photos JPG.
+- Jusqu'à MAX_PHOTOS photos JPG.
 - Un cadre blanc fin autour de chaque photo.
 - Des angles de rotation différents (horizontal, incliné à gauche ou à droite).
-- Des tailles de photos variables pour un rendu plus naturel.
 - Une disposition répartie sur toute la surface, sans alignement strict en grille.
 - Les proportions originales des photos.
+
+Nouveau :
+- Les photos se chevauchent partiellement (OVERLAP_BASE).
+- La taille de chaque photo varie aléatoirement de ± 40 % (SIZE_VARIATION).
+- Position légèrement décalée aléatoirement dans sa zone (JITTER).
+- Ordre d'empilement aléatoire (certaines photos passent au-dessus des autres).
 
 Usage:
 pip install Pillow
 
-python3 patchwork.py 
-
-
+python3 patchwork.py
 '''
 
 from PIL import Image, ImageOps
@@ -34,12 +38,15 @@ OUTPUT = "patchwork.jpg"
 
 BACKGROUND = (0, 0, 0)
 FRAME_COLOR = (255, 255, 255)
-FRAME_WIDTH = 5                  # épaisseur du cadre blanc en pixels
+FRAME_WIDTH = 5                    # épaisseur du cadre blanc en pixels
 ANGLE_MIN, ANGLE_MAX = -30, 30     # inclinaison minimale et maximale en degrés
 MARGIN = 35
-GAP = 18
 
-# Composition reproductible. Utiliser random.seed() pour varier à chaque lancement.
+OVERLAP_BASE = 1.35                # >1 : les photos dépassent de leur zone => chevauchement
+SIZE_VARIATION = 0.40              # variation de taille aléatoire : ± 40 %
+JITTER = 0.30                      # décalage aléatoire du centre (fraction de la zone)
+
+# Composition reproductible. Commenter la ligne pour varier à chaque lancement.
 random.seed(42)
 
 # ---------------- RECHERCHE DES PHOTOS ----------------
@@ -54,58 +61,68 @@ files = sorted(
 if not files:
     raise SystemExit("Aucun fichier JPG/JPEG trouvé dans le dossier courant.")
 
-print(f"{len(files)} photo(s) trouvée(s).")
+n = len(files)
+print(f"{n} photo(s) trouvée(s).")
 
 # ---------------- PREPARATION DU CANVAS ----------------
 canvas = Image.new("RGB", (WIDTH, HEIGHT), BACKGROUND)
 
-# Les cases répartissent les photos sur toute la surface.
-# Les photos sont ensuite tournées et de tailles variées : pas de grille horizontale rigide.
-cols, rows = 20, 5
-cell_w = (WIDTH - 2 * MARGIN - (cols - 1) * GAP) / cols
-cell_h = (HEIGHT - 2 * MARGIN - (rows - 1) * GAP) / rows
+# Grille adaptée au nombre de photos (zones de répartition, pas de placement rigide).
+usable_w = WIDTH - 2 * MARGIN
+usable_h = HEIGHT - 2 * MARGIN
+rows = max(1, round(math.sqrt(n * usable_h / usable_w)))
+cols = math.ceil(n / rows)
+cell_w = usable_w / cols
+cell_h = usable_h / rows
 
 slots = [(c, r) for r in range(rows) for c in range(cols)]
 random.shuffle(slots)
+slots = slots[:n]
 
-# Angles distincts autant que possible, alternant inclinaisons gauche/droite.
+# Angles alternant inclinaisons gauche/droite.
 angles = []
-for i in range(len(files)):
+for i in range(n):
     magnitude = random.uniform(ANGLE_MIN, ANGLE_MAX)
     sign = -1 if i % 2 else 1
     angles.append(sign * magnitude)
 random.shuffle(angles)
 
+# Ordre d'empilement aléatoire (la dernière photo dessinée est au-dessus).
+order = list(range(n))
+random.shuffle(order)
+
 # ---------------- ASSEMBLAGE ----------------
-for i, path in enumerate(files):
+for rank, i in enumerate(order):
+    path = files[i]
     try:
         with Image.open(path) as im:
             photo = ImageOps.exif_transpose(im).convert("RGB")
 
         col, row = slots[i]
-        center_x = MARGIN + col * (cell_w + GAP) + cell_w / 2
-        center_y = MARGIN + row * (cell_h + GAP) + cell_h / 2
+        center_x = MARGIN + col * cell_w + cell_w / 2
+        center_y = MARGIN + row * cell_h + cell_h / 2
+
+        # Décalage aléatoire du centre pour casser l'alignement.
+        center_x += random.uniform(-JITTER, JITTER) * cell_w
+        center_y += random.uniform(-JITTER, JITTER) * cell_h
 
         angle = angles[i]
         theta = math.radians(abs(angle))
         cos_a, sin_a = math.cos(theta), math.sin(theta)
 
-        # Dimensionner la photo pour que son cadre tourné reste dans sa case.
-        # On tient compte de l'encombrement réel après rotation.
-        available_w = cell_w * 0.88
-        available_h = cell_h * 0.88
         source_w, source_h = photo.size
-
-        # Dimensions maximales avant rotation, en tenant compte du cadre.
         framed_w = source_w + 2 * FRAME_WIDTH
         framed_h = source_h + 2 * FRAME_WIDTH
 
+        # Échelle pour que la photo tournée remplisse exactement sa zone.
         scale_fit = min(
-            available_w / (framed_w * cos_a + framed_h * sin_a),
-            available_h / (framed_w * sin_a + framed_h * cos_a)
+            cell_w / (framed_w * cos_a + framed_h * sin_a),
+            cell_h / (framed_w * sin_a + framed_h * cos_a)
         )
-        # Variation de taille pour un rendu moins uniforme.
-        scale = scale_fit * random.uniform(0.78, 1.0)
+
+        # Agrandissement de base (chevauchement) × variation aléatoire de ± 40 %.
+        size_factor = random.uniform(1 - SIZE_VARIATION, 1 + SIZE_VARIATION)
+        scale = scale_fit * OVERLAP_BASE * size_factor
 
         new_w = max(1, int(source_w * scale))
         new_h = max(1, int(source_h * scale))
@@ -127,15 +144,16 @@ for i, path in enumerate(files):
             fillcolor=(0, 0, 0, 0)
         )
 
+        # Garder la photo entièrement dans l'image finale.
         x = int(center_x - rotated.width / 2)
         y = int(center_y - rotated.height / 2)
+        x = max(0, min(x, WIDTH - rotated.width))
+        y = max(0, min(y, HEIGHT - rotated.height))
 
-        # Collage de la photo tournée sur le fond noir.
-        canvas_rgba = canvas.convert("RGBA")
-        canvas_rgba.alpha_composite(rotated, (x, y))
-        canvas = canvas_rgba.convert("RGB")
+        # Collage avec le canal alpha comme masque (les coins transparents restent transparents).
+        canvas.paste(rotated, (x, y), rotated)
 
-        print(f"[{i + 1:02d}/{len(files):02d}] {path.name} — rotation {angle:+.1f}°")
+        print(f"[{rank + 1:02d}/{n:02d}] {path.name} — rotation {angle:+.1f}° — taille {size_factor * 100:.0f} %")
 
     except Exception as exc:
         print(f"ERREUR avec {path.name} : {exc}")

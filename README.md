@@ -1,5 +1,6 @@
-# Génération pele-mlel  artistique du patchwork
-les photos seront disposées sur le fond noir avec des rotations différentes et aléatoires, comme un montage photographique ou un mur de photos.
+# Génération Pêle-mêle photos
+Vous pouvez créer un pêle-mêle photo façon patchwork en choisissant un dossier ayant plusieurs fichiers JPG/JPEG
+Les photos seront disposées sur le fond noir avec des rotations différentes et aléatoires, comme un montage photographique ou un mur de photos.
 
 Le script conservera :
 - Une image finale de width × height pixels.

@@ -26,6 +26,8 @@ pip install Pillow
 python3 patchwork.py
 '''
 
+import sys
+
 from PIL import Image, ImageOps
 from pathlib import Path
 import random
@@ -33,8 +35,8 @@ import argparse
 import math
 
 # ---------------- PARAMETRES ----------------
-WIDTH, HEIGHT = 3840, 1200
-MAX_PHOTOS = 100
+WIDTH, HEIGHT = 1920, 1200
+MAX_PHOTOS = 15
 OUTPUT = "patchwork.jpg"
 
 BACKGROUND = (0, 0, 0)
@@ -47,8 +49,6 @@ OVERLAP_BASE = 1.35                # >1 : les photos dépassent de leur zone => 
 SIZE_VARIATION = 0.40              # variation de taille aléatoire : ± 40 %
 JITTER = 0.30                      # décalage aléatoire du centre (fraction de la zone)
 
-# Composition reproductible. Commenter la ligne pour varier à chaque lancement.
-random.seed(42)
 
 
 # ---------------- RECHERCHE DES PHOTOS ----------------
@@ -73,11 +73,19 @@ files = [
 if not files:
     raise SystemExit("Aucun fichier JPG/JPEG trouvé dans le dossier courant.")
 
+# Mélanger aléatoirement les fichiers
+random.shuffle(files)
 
-# chosir aleatoirement les fichiers
-files = random.sample(files, min(len(files), MAX_PHOTOS))
+# Conserver au maximum MAX_PHOTOS fichiers
+files = files[:MAX_PHOTOS]
+
+
 n = len(files)
 print(f"{n} photo(s) trouvée(s).")
+
+# Composition reproductible. Commenter la ligne pour varier à chaque lancement.
+random.seed(42)
+
 
 # ---------------- PREPARATION DU CANVAS ----------------
 canvas = Image.new("RGB", (WIDTH, HEIGHT), BACKGROUND)

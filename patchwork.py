@@ -29,6 +29,7 @@ python3 patchwork.py
 from PIL import Image, ImageOps
 from pathlib import Path
 import random
+import argparse
 import math
 
 # ---------------- PARAMETRES ----------------
@@ -49,18 +50,32 @@ JITTER = 0.30                      # décalage aléatoire du centre (fraction de
 # Composition reproductible. Commenter la ligne pour varier à chaque lancement.
 random.seed(42)
 
+
 # ---------------- RECHERCHE DES PHOTOS ----------------
-files = sorted(
-    [p for p in Path(".").iterdir()
-     if p.is_file()
-     and p.suffix.lower() in (".jpg", ".jpeg")
-     and p.name.lower() != OUTPUT.lower()],
-    key=lambda p: p.name.lower()
-)[:MAX_PHOTOS]
+
+parser = argparse.ArgumentParser(description="Sélection aléatoire de photos JPG/JPEG")
+parser.add_argument("directory", help="Chemin du répertoire à scanner")
+args = parser.parse_args()
+
+directory = Path(args.directory)
+
+if not directory.is_dir():
+    parser.error(f"Le répertoire n'existe pas : {directory}")
+
+files = [
+    p for p in directory.iterdir()
+    if p.is_file()
+    and p.suffix.lower() in (".jpg", ".jpeg")
+    and p.name.lower() != OUTPUT.lower()
+]
+
 
 if not files:
     raise SystemExit("Aucun fichier JPG/JPEG trouvé dans le dossier courant.")
 
+
+# chosir aleatoirement les fichiers
+files = random.sample(files, min(len(files), MAX_PHOTOS))
 n = len(files)
 print(f"{n} photo(s) trouvée(s).")
 
